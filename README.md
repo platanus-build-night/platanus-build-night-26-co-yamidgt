@@ -1,8 +1,15 @@
 # RESPIRA
 
+![project-logo](project-logo.png)
+
 Sistema de despacho inteligente de ambulancias para emergencias medicas.
 
 Conecta a ciudadanos que reportan emergencias con prestadores privados de transporte medico, asignando unidades disponibles segun cercania y puntaje de confiabilidad, con incentivos monetarios por despacho y rapidez.
+
+## Despliegue
+
+- Ciudadano: https://respira-kxro.onrender.com/static/ciudadano.html
+- Dashboard CRUE: https://respira-kxro.onrender.com/static/dashboard.html
 
 ## Caracteristicas
 
