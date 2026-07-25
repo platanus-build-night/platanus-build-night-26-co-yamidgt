@@ -717,9 +717,11 @@ document.getElementById("btnSimular").addEventListener("click", async () => {
 });
 
 // ---------------- Alerta sonora y visual para eventos nuevos ----------------
+let audioCtx = null;
 function reproducirAlerta() {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
     [880, 660].forEach((freq, i) => {
       const o = ctx.createOscillator();
       const g = ctx.createGain();
