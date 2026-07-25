@@ -162,7 +162,6 @@
     border-radius: 8px;
     padding: 10px 16px;
   }
-  .metric-card.m-tiempo { --acento-line: var(--acento); }
   .metric-card.m-porc { --acento-line: var(--verde); }
   .metric-card.m-disp { --acento-line: var(--verde); }
   .metric-card.m-eventos { --acento-line: var(--rojo); }
@@ -357,10 +356,6 @@
 </header>
 
 <div class="metrics-bar">
-  <div class="metric-card m-tiempo">
-    <div class="label">Tiempo prom. de respuesta hoy</div>
-    <div class="value" id="mTiempo">-- min</div>
-  </div>
   <div class="metric-card m-porc">
     <div class="label">% asignacion exitosa</div>
     <div class="value" id="mPorc">--%</div>
@@ -701,7 +696,7 @@ async function cargarRanking() {
 async function cargarMetricas() {
   const res = await fetch(`${API}/api/metricas`);
   const m = await res.json();
-  document.getElementById("mTiempo").textContent = `${m.tiempo_promedio_respuesta_hoy} min`;
+
   document.getElementById("mPorc").textContent = `${m.porcentaje_asignacion_exitosa}%`;
   document.getElementById("mDisp").textContent = m.ambulancias_disponibles_ahora;
 }
