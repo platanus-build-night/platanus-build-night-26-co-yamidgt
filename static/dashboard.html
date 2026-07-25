@@ -593,7 +593,7 @@ async function cargarEventos() {
   eventosCache = await res.json();
   const ahora = Date.now();
   eventosCache.forEach(evt => {
-    if (evt.eta_min && evt.eta_min > 0 && !evt._etaReceived) evt._etaReceived = ahora;
+    if (evt.eta_min && evt.eta_min > 0) { evt._etaStartAt = evt._etaStartAt || ahora; evt._etaStartVal = evt._etaStartVal ?? evt.eta_min; }
   });
   renderEventos();
   eventosCache.forEach(upsertEvento);
@@ -604,9 +604,10 @@ async function cargarEventos() {
 function getEtaRestante(evt) {
   if (!evt.eta_min || evt.eta_min <= 0) return 0;
   const ahora = Date.now();
-  const recibido = evt._etaReceived || evt._ultimaRecepcion || ahora;
-  const transcurridoMin = (ahora - recibido) / 60000;
-  return Math.max(0, Math.round((evt.eta_min - transcurridoMin) * 10) / 10);
+  const inicio = evt._etaStartAt || evt._ultimaRecepcion || ahora;
+  const inicioValor = evt._etaStartVal ?? evt.eta_min;
+  const transcurridoMin = (ahora - inicio) / 60000;
+  return Math.max(0, Math.round((inicioValor - transcurridoMin) * 10) / 10);
 }
 
 function renderEventos() {
@@ -749,7 +750,7 @@ function mostrarToast(mensaje) {
 
 // ---------------- Sockets en tiempo real ----------------
 socket.on("nuevo_evento", (evt) => {
-  if (evt.eta_min && evt.eta_min > 0) evt._etaReceived = Date.now();
+  if (evt.eta_min && evt.eta_min > 0) { evt._etaStartAt = Date.now(); evt._etaStartVal = evt.eta_min; }
   eventosCache.push(evt);
   renderEventos();
   upsertEvento(evt);
@@ -759,7 +760,7 @@ socket.on("nuevo_evento", (evt) => {
 });
 
 socket.on("evento_actualizado", (evt) => {
-  if (evt.eta_min && evt.eta_min > 0) evt._etaReceived = Date.now();
+  if (evt.eta_min && evt.eta_min > 0) { evt._etaStartAt = Date.now(); evt._etaStartVal = evt.eta_min; }
   const idx = eventosCache.findIndex(e => e.id === evt.id);
   if (idx >= 0) eventosCache[idx] = evt; else eventosCache.push(evt);
   renderEventos();
