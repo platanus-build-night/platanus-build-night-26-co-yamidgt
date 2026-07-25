@@ -618,7 +618,6 @@ function renderEventos() {
       const etaRestante = getEtaRestante(evt);
       div.innerHTML = `
         <div class="tipo">🚨 ${evt.tipo}</div>
-        <div class="espera">Esperando: ${minutosDesde(evt.timestamp)} min · Estado: ${evt.estado}</div>
         ${renderEvidenciaThumb(evt)}
         ${renderUrgenciaBadge(evt)}
         ${evt.estado === "pendiente" ? `<button onclick="abrirModal('${evt.id}')">Asignar</button>` : `<div class="espera">Ambulancia asignada · ETA ${etaRestante} min</div>`}
