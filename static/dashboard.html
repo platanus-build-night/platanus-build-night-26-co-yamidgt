@@ -594,6 +594,7 @@ async function cargarEventos() {
   const ahora = Date.now();
   eventosCache.forEach(evt => {
     if (evt.eta_min && evt.eta_min > 0 && !evt._etaReceivedAt) evt._etaReceivedAt = ahora;
+    if (!evt._receivedAt) evt._receivedAt = ahora;
   });
   renderEventos();
   eventosCache.forEach(upsertEvento);
@@ -746,7 +747,8 @@ function mostrarToast(mensaje) {
 
 // ---------------- Sockets en tiempo real ----------------
 socket.on("nuevo_evento", (evt) => {
-  if (evt.eta_min && evt.eta_min > 0) evt._etaReceivedAt = Date.now();
+  if (evt.eta_min && evt.eta_min > 0 && !evt._etaReceivedAt) evt._etaReceivedAt = Date.now();
+  if (!evt._receivedAt) evt._receivedAt = Date.now();
   eventosCache.push(evt);
   renderEventos();
   upsertEvento(evt);
@@ -756,7 +758,7 @@ socket.on("nuevo_evento", (evt) => {
 });
 
 socket.on("evento_actualizado", (evt) => {
-  if (evt.eta_min && evt.eta_min > 0) evt._etaReceivedAt = Date.now();
+  if (evt.eta_min && evt.eta_min > 0 && !evt._etaReceivedAt) evt._etaReceivedAt = Date.now();
   const idx = eventosCache.findIndex(e => e.id === evt.id);
   if (idx >= 0) eventosCache[idx] = evt; else eventosCache.push(evt);
   renderEventos();
