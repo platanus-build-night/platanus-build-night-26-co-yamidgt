@@ -591,9 +591,22 @@ let eventosCache = [];
 async function cargarEventos() {
   const res = await fetch(`${API}/api/eventos`);
   eventosCache = await res.json();
+  const ahora = Date.now();
+  eventosCache.forEach(evt => {
+    if (evt.eta_min && evt.eta_min > 0 && !evt._etaReceived) evt._etaReceived = ahora;
+  });
   renderEventos();
   eventosCache.forEach(upsertEvento);
   document.getElementById("mEventos").textContent = eventosCache.length;
+}
+
+// ---------------- ETA client-side countdown ----------------
+function getEtaRestante(evt) {
+  if (!evt.eta_min || evt.eta_min <= 0) return 0;
+  const ahora = Date.now();
+  const recibido = evt._etaReceived || evt._ultimaRecepcion || ahora;
+  const transcurridoMin = (ahora - recibido) / 60000;
+  return Math.max(0, Math.round((evt.eta_min - transcurridoMin) * 10) / 10);
 }
 
 function renderEventos() {
@@ -605,12 +618,17 @@ function renderEventos() {
     .forEach(evt => {
       const div = document.createElement("div");
       div.className = "evento-card" + (evt.estado === "en_camino" ? " en_camino" : "");
+      let infoEta = "";
+      if (evt.estado === "asignado" || evt.estado === "en_camino") {
+        const restante = getEtaRestante(evt);
+        infoEta = `Ambulancia asignada · ETA ${restante} min`;
+      }
       div.innerHTML = `
         <div class="tipo">🚨 ${evt.tipo}</div>
         <div class="espera">Esperando: ${minutosDesde(evt.timestamp)} min · Estado: ${evt.estado}</div>
         ${renderEvidenciaThumb(evt)}
         ${renderUrgenciaBadge(evt)}
-        ${evt.estado === "pendiente" ? `<button onclick="abrirModal('${evt.id}')">Asignar</button>` : `<div class="espera">Ambulancia asignada · ETA ${evt.eta_min ?? "-"} min</div>`}
+        ${evt.estado === "pendiente" ? `<button onclick="abrirModal('${evt.id}')">Asignar</button>` : `<div class="espera">${infoEta}</div>`}
       `;
       cont.appendChild(div);
     });
@@ -731,6 +749,7 @@ function mostrarToast(mensaje) {
 
 // ---------------- Sockets en tiempo real ----------------
 socket.on("nuevo_evento", (evt) => {
+  if (evt.eta_min && evt.eta_min > 0) evt._etaReceived = Date.now();
   eventosCache.push(evt);
   renderEventos();
   upsertEvento(evt);
@@ -740,6 +759,7 @@ socket.on("nuevo_evento", (evt) => {
 });
 
 socket.on("evento_actualizado", (evt) => {
+  if (evt.eta_min && evt.eta_min > 0) evt._etaReceived = Date.now();
   const idx = eventosCache.findIndex(e => e.id === evt.id);
   if (idx >= 0) eventosCache[idx] = evt; else eventosCache.push(evt);
   renderEventos();
@@ -786,6 +806,8 @@ init();
 setInterval(cargarEventos, 8000);
 setInterval(cargarMetricas, 8000);
 setInterval(cargarHeatmap, 60000);
+// Actualiza el countdown de ETA cada segundo
+setInterval(renderEventos, 1000);
 </script>
 </body>
 </html>
