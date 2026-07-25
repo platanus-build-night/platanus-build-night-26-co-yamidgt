@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-<title>RESPIRA · Emergencia No-SOAT</title>
+<title>RESPIRA · Emergencia</title>
 
 <script>
   // Se aplica el tema ANTES de pintar la pagina para evitar el parpadeo
@@ -219,8 +219,8 @@
     <section id="pantalla-inicio" class="fade-in">
       <div class="mt-6 mb-8 text-center">
         <p class="text-desc">
-          Presiona el boton si necesitas atencion medica <span class="text-strong-rojo">URGENTE</span>
-          y no cuentas con cobertura SOAT.
+          Presiona el boton si necesitas atencion medica <span class="text-strong-rojo">URGENTE</span>.
+          Cualquier persona puede solicitar ayuda.
         </p>
       </div>
 
@@ -232,7 +232,7 @@
       </div>
 
       <p class="text-desc-sm px-4">
-        Presiona si necesitas atencion medica <span class="text-strong">URGENTE (No SOAT)</span>.
+        Presiona si necesitas atencion medica <span class="text-strong">URGENTE</span>.
         Se compartira tu ubicacion con el CRUE para despachar la ambulancia mas cercana.
       </p>
     </section>
@@ -397,7 +397,7 @@ async function enviarEmergencia(lat, lng) {
   const res = await fetch(`${API}/api/emergencia`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ lat, lng, tipo: "no-SOAT" }),
+    body: JSON.stringify({ lat, lng, tipo: "emergencia" }),
   });
   const data = await res.json();
   eventoActual = data.id_evento;

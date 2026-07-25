@@ -2,7 +2,7 @@
 RESPIRA - Red Estrategica de Preactivacion, Inteligencia y Respuesta Agil
 Backend FastAPI + Socket.IO
 
-Simula un sistema de despacho de ambulancias para emergencias "no-SOAT"
+Simula un sistema de despacho de ambulancias para emergencias medicas
 (pacientes sin cobertura de accidente de transito), con incentivos monetarios
 para prestadores privados y un sistema de puntaje/ranking que castiga los
 rechazos de servicio.
@@ -67,7 +67,7 @@ async def root():
 # ---------------------------------------------------------------------------
 
 VELOCIDAD_PROMEDIO_KMH = 30.0
-BONO_BASE_NO_SOAT = 50_000
+BONO_BASE = 50_000
 BONO_RAPIDEZ = 30_000  # se otorga si la ambulancia llega en menos de 10 min
 UMBRAL_RAPIDEZ_MIN = 10.0
 
@@ -107,7 +107,7 @@ IA_ESQUEMA_TRIAGE = {
 
 IA_PROMPT_TRIAGE = (
     "Eres un asistente de triage para el sistema de despacho de ambulancias RESPIRA. "
-    "Analiza esta foto que un ciudadano adjunto a su reporte de emergencia medica (caso no-SOAT). "
+    "Analiza esta foto que un ciudadano adjunto a su reporte de emergencia medica. "
     "Evalua que tan urgente parece la situacion basandote UNICAMENTE en evidencia visual "
     "(heridas, sangrado, posicion corporal, contexto del lugar, señales de gravedad). "
     "Esto es una sugerencia de apoyo para priorizar el despacho, NO un diagnostico medico "
@@ -143,7 +143,7 @@ NOMBRES_PRESTADORES = [
     "Grupo SOS Emergencias",
 ]
 
-TIPOS_EVENTO = ["no-SOAT"]
+TIPOS_EVENTO = ["emergencia"]
 
 # ---------------------------------------------------------------------------
 # Estado en memoria (suficiente para una demo de hackathon, un solo proceso)
@@ -169,14 +169,14 @@ def eta_minutos(distancia_km: float) -> float:
 
 
 def calcular_incentivo(distancia_km: float) -> dict:
-    """Bono base por despacho no-SOAT + bono extra si la ambulancia
+    """Bono base por despacho + bono extra si la ambulancia
     alcanza a llegar en menos de 10 minutos (segun distancia simulada)."""
     eta = eta_minutos(distancia_km)
     bono_rapidez = BONO_RAPIDEZ if eta < UMBRAL_RAPIDEZ_MIN else 0
     return {
-        "base": BONO_BASE_NO_SOAT,
+        "base": BONO_BASE,
         "bono_rapidez": bono_rapidez,
-        "total": BONO_BASE_NO_SOAT + bono_rapidez,
+        "total": BONO_BASE + bono_rapidez,
         "eta_min": round(eta, 1),
     }
 
@@ -201,7 +201,7 @@ def nueva_ambulancia(idx: int, zona_nombre: str) -> dict:
     }
 
 
-def nuevo_evento(lat: float, lng: float, tipo: str = "no-SOAT", video_url: Optional[str] = None) -> dict:
+def nuevo_evento(lat: float, lng: float, tipo: str = "emergencia", video_url: Optional[str] = None) -> dict:
     return {
         "id": str(uuid.uuid4())[:8],
         "lat": lat,
@@ -306,7 +306,7 @@ async def analizar_gravedad_ia(evento_id: str, ruta_archivo: Path, media_type: s
 class EmergenciaIn(BaseModel):
     lat: float
     lng: float
-    tipo: str = "no-SOAT"
+    tipo: str = "emergencia"
     video_url: Optional[str] = None
 
 
@@ -327,7 +327,7 @@ class RechazarIn(BaseModel):
 
 @fastapi_app.post("/api/emergencia")
 async def crear_emergencia(data: EmergenciaIn):
-    """El ciudadano reporta una emergencia no-SOAT. Se crea el evento,
+    """El ciudadano reporta una emergencia. Se crea el evento,
     queda 'pendiente' y se notifica en tiempo real al CRUE (dashboard)."""
     evt = nuevo_evento(data.lat, data.lng, data.tipo, data.video_url)
     async with lock:

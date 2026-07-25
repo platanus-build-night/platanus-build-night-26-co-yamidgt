@@ -377,7 +377,7 @@
 
 <div class="layout">
   <div id="sidebar-left">
-    <button class="btn-sim" id="btnSimular">🚨 Simular Emergencia No-SOAT</button>
+    <button class="btn-sim" id="btnSimular">🚨 Simular Emergencia</button>
     <h3>Eventos activos</h3>
     <div id="listaEventos"></div>
   </div>
@@ -696,7 +696,7 @@ document.getElementById("btnSimular").addEventListener("click", async () => {
   await fetch(`${API}/api/emergencia`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ lat: center.lat, lng: center.lng, tipo: "no-SOAT" }),
+    body: JSON.stringify({ lat: center.lat, lng: center.lng, tipo: "emergencia" }),
   });
 });
 
@@ -736,7 +736,7 @@ socket.on("nuevo_evento", (evt) => {
   upsertEvento(evt);
   cargarMetricas();
   reproducirAlerta();
-  mostrarToast(`🚨 Nueva emergencia no-SOAT reportada`);
+  mostrarToast(`🚨 Nueva emergencia reportada`);
 });
 
 socket.on("evento_actualizado", (evt) => {
