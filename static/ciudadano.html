@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>RESPIRA · Emergencia No-SOAT</title>
+
+<script>
+  // Se aplica el tema ANTES de pintar la pagina para evitar el parpadeo
+  // (flash) de un tema incorrecto al cargar.
+  (function () {
+    var t = localStorage.getItem("respira_tema");
+    if (!t) t = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
+
+<style>
+  :root[data-theme="dark"] {
+    --bg: #0a0e16;
+    --panel: #10141f;
+    --panel-2: #161b2a;
+    --well: #0a0f1c;
+    --border: #232a3d;
+    --divider: #1c2436;
+    --text: #e8ecf5;
+    --muted: #8993ab;
+    --verde: #10b981;
+    --amarillo: #f5a623;
+    --rojo: #ef4444;
+    --rojo-rgb: 239, 68, 68;
+    --acento: #22d3ee;
+    --verde-bg: rgba(16, 185, 129, .15);
+    --rojo-bg: rgba(239, 68, 68, .15);
+    --verde-text: #4ade80;
+    --amarillo-text: #ffd166;
+    --rojo-text: #ff8f83;
+    --on-accent: #04141a;
+  }
+  :root[data-theme="light"] {
+    --bg: #eef1f6;
+    --panel: #ffffff;
+    --panel-2: #f6f8fb;
+    --well: #e7ecf3;
+    --border: #d8dfe9;
+    --divider: #e4e9f0;
+    --text: #131826;
+    --muted: #5b6b82;
+    --verde: #059669;
+    --amarillo: #b45309;
+    --rojo: #dc2626;
+    --rojo-rgb: 220, 38, 38;
+    --acento: #0e7490;
+    --verde-bg: rgba(5, 150, 105, .10);
+    --rojo-bg: rgba(220, 38, 38, .10);
+    --verde-text: #059669;
+    --amarillo-text: #b45309;
+    --rojo-text: #dc2626;
+    --on-accent: #ffffff;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    transition: background-color .25s ease, color .25s ease;
+  }
+  .mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+
+  @keyframes pulse-ring {
+    0% { box-shadow: 0 0 0 0 rgba(var(--rojo-rgb), .55); }
+    70% { box-shadow: 0 0 0 28px rgba(var(--rojo-rgb), 0); }
+    100% { box-shadow: 0 0 0 0 rgba(var(--rojo-rgb), 0); }
+  }
+  @keyframes live-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(var(--rojo-rgb), .55); }
+    70% { box-shadow: 0 0 0 7px rgba(var(--rojo-rgb), 0); }
+    100% { box-shadow: 0 0 0 0 rgba(var(--rojo-rgb), 0); }
+  }
+  .live-dot-app {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--rojo); flex-shrink: 0;
+    animation: live-pulse 2s infinite;
+  }
+
+  .btn-panico {
+    width: 13rem; height: 13rem; border-radius: 9999px;
+    background: var(--rojo);
+    box-shadow: 0 0 0 3px var(--panel), 0 0 0 6px var(--rojo), 0 14px 40px rgba(var(--rojo-rgb), .35);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+    color: #ffffff; border: none; cursor: pointer;
+    animation: pulse-ring 2s infinite;
+    transition: transform .15s;
+  }
+  .btn-panico:active { transform: scale(.96); }
+  .btn-panico-label {
+    font-family: 'Space Grotesk', sans-serif; font-weight: 700;
+    font-size: 18px; letter-spacing: .5px; color: #ffffff;
+  }
+
+  .spinner {
+    border: 4px solid var(--border);
+    border-top-color: var(--acento);
+    border-radius: 50%;
+    width: 42px; height: 42px;
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #map-seguimiento { height: 220px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); }
+  .fade-in { animation: fadeIn .35s ease-out; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px);} to { opacity: 1; transform: translateY(0);} }
+
+  header.app-header {
+    background: linear-gradient(180deg, var(--rojo-bg), transparent 130%);
+    border-bottom: 1px solid var(--border);
+  }
+  .brand-title { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 24px; letter-spacing: .3px; color: var(--text); }
+  .brand-sub { font-size: 11px; color: var(--muted); }
+
+  .btn-tema {
+    width: 36px; height: 36px; border-radius: 8px;
+    background: var(--panel-2); border: 1px solid var(--border);
+    color: var(--text); font-size: 15px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color .2s, transform .15s;
+  }
+  .btn-tema:hover { border-color: var(--acento); }
+  .btn-tema:active { transform: scale(.92); }
+
+  .text-desc { color: var(--text); opacity: .85; font-size: 14px; line-height: 1.6; }
+  .text-desc-sm { color: var(--muted); font-size: 12px; text-align: center; }
+  .text-strong-rojo { color: var(--rojo-text); font-weight: 700; }
+  .text-strong { color: var(--text); font-weight: 600; }
+
+  .card-panel { background: var(--panel-2); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
+  .card-panel-sm { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+  .estado-title { font-family: 'Space Grotesk', sans-serif; font-size: 19px; font-weight: 700; color: var(--text); }
+  .mono-num { font-family: 'IBM Plex Mono', monospace; font-size: 22px; font-weight: 600; }
+  .text-rojo { color: var(--rojo-text); }
+  .text-verde { color: var(--verde-text); }
+  .text-amarillo { color: var(--amarillo-text); }
+
+  .btn-secondary {
+    width: 100%; font-family: 'Space Grotesk', sans-serif;
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    font-weight: 600; padding: 13px; border-radius: 12px; cursor: pointer;
+  }
+  .btn-secondary:disabled { opacity: .6; }
+  .btn-outline-rojo {
+    width: 100%; font-family: 'Space Grotesk', sans-serif;
+    background: transparent; border: 1px solid var(--rojo); color: var(--rojo-text);
+    font-weight: 600; padding: 13px; border-radius: 12px; cursor: pointer;
+  }
+  .btn-primario-rojo {
+    width: 100%; font-family: 'Space Grotesk', sans-serif;
+    background: var(--rojo); border: none; color: #ffffff;
+    font-weight: 600; padding: 13px; border-radius: 12px; cursor: pointer;
+  }
+  .preview-media { width: 100%; border-radius: 12px; border: 1px solid var(--border); }
+
+  .section-title {
+    font-family: 'Space Grotesk', sans-serif; font-size: 12.5px; font-weight: 700;
+    color: var(--muted); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 12px;
+  }
+  .footer-text { padding: 12px 20px; text-align: center; font-size: 11px; color: var(--muted); border-top: 1px solid var(--border); }
+
+  /* Stepper de 4 etapas del seguimiento */
+  .stepper { display: flex; align-items: center; }
+  .step { display: flex; flex-direction: column; align-items: center; width: 56px; flex-shrink: 0; }
+  .step-circle {
+    width: 34px; height: 34px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; background: var(--panel-2); border: 2px solid var(--border); color: var(--muted);
+    transition: background .3s, border-color .3s, color .3s;
+  }
+  .step-label { font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: var(--muted); margin-top: 4px; text-align: center; transition: color .3s; }
+  .step-line { flex: 1; height: 3px; background: var(--border); margin: 0 2px; margin-bottom: 16px; transition: background .3s; }
+  .step-circle.done { background: var(--verde); border-color: var(--verde); color: #fff; }
+  .step-label.done { color: var(--verde-text); }
+  .step-line.done { background: var(--verde); }
+  .step-circle.active {
+    background: var(--rojo); border-color: var(--rojo); color: #fff;
+    animation: pulse-ring 1.6s infinite;
+  }
+  .step-label.active { color: var(--rojo-text); font-weight: 700; }
+</style>
+</head>
+<body>
+
+<div class="max-w-md mx-auto min-h-screen flex flex-col">
+
+  <!-- Header -->
+  <header class="app-header px-5 pt-6 pb-4">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <span class="live-dot-app"></span>
+        <div>
+          <h1 class="brand-title">RESPIRA</h1>
+          <p class="brand-sub">Tu emergencia, nuestra prioridad</p>
+        </div>
+      </div>
+      <button id="btnTema" class="btn-tema" title="Cambiar tema" aria-label="Cambiar tema claro/oscuro">🌙</button>
+    </div>
+  </header>
+
+  <main class="flex-1 px-5 pb-24">
+
+    <!-- ===================== PANTALLA PRINCIPAL ===================== -->
+    <section id="pantalla-inicio" class="fade-in">
+      <div class="mt-6 mb-8 text-center">
+        <p class="text-desc">
+          Presiona el boton si necesitas atencion medica <span class="text-strong-rojo">URGENTE</span>
+          y no cuentas con cobertura SOAT.
+        </p>
+      </div>
+
+      <div class="flex justify-center my-10">
+        <button id="btnPanico" class="btn-panico">
+          <span class="text-6xl">🚑</span>
+          <span class="btn-panico-label">EMERGENCIA</span>
+        </button>
+      </div>
+
+      <p class="text-desc-sm px-4">
+        Presiona si necesitas atencion medica <span class="text-strong">URGENTE (No SOAT)</span>.
+        Se compartira tu ubicacion con el CRUE para despachar la ambulancia mas cercana.
+      </p>
+    </section>
+
+    <!-- ===================== PANTALLA CARGANDO ===================== -->
+    <section id="pantalla-cargando" class="hidden fade-in flex flex-col items-center justify-center py-24 gap-5">
+      <div class="spinner"></div>
+      <p class="text-strong" id="textoCarga">🔍 Localizando tu posicion...</p>
+    </section>
+
+    <!-- ===================== PANTALLA SEGUIMIENTO ===================== -->
+    <section id="pantalla-seguimiento" class="hidden fade-in">
+      <div class="stepper mb-4" id="stepper">
+        <div class="step">
+          <div class="step-circle" id="circle-pendiente">🔍</div>
+          <div class="step-label" id="label-pendiente">Buscando</div>
+        </div>
+        <div class="step-line" id="line-1"></div>
+        <div class="step">
+          <div class="step-circle" id="circle-asignado">🚑</div>
+          <div class="step-label" id="label-asignado">Asignada</div>
+        </div>
+        <div class="step-line" id="line-2"></div>
+        <div class="step">
+          <div class="step-circle" id="circle-en_camino">🛣️</div>
+          <div class="step-label" id="label-en_camino">En camino</div>
+        </div>
+        <div class="step-line" id="line-3"></div>
+        <div class="step">
+          <div class="step-circle" id="circle-completado">✅</div>
+          <div class="step-label" id="label-completado">Llegó</div>
+        </div>
+      </div>
+
+      <div id="map-seguimiento" class="mb-4"></div>
+
+      <div class="card-panel text-center mb-4">
+        <p class="estado-title" id="estadoSeguimiento">🚑 Buscando ambulancia...</p>
+        <p class="text-desc-sm mt-1" id="detalleSeguimiento">Tu solicitud fue recibida por el CRUE</p>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3 mb-4">
+        <div class="card-panel-sm text-center">
+          <p class="text-desc-sm">Tiempo transcurrido</p>
+          <p class="mono-num text-rojo" id="timer">00:00</p>
+        </div>
+        <div class="card-panel-sm text-center">
+          <p class="text-desc-sm">Incentivo prestador</p>
+          <p class="mono-num text-verde" id="incentivoTxt">--</p>
+        </div>
+      </div>
+
+      <input type="file" id="inputEvidencia" accept="image/*,video/*" class="hidden" />
+      <button id="btnEvidencia" class="btn-secondary mb-3">
+        📎 Subir evidencia (foto / video)
+      </button>
+      <div id="evidenciaPreview" class="hidden mb-3">
+        <img id="evidenciaImg" class="hidden preview-media" />
+        <video id="evidenciaVideo" class="hidden preview-media" controls></video>
+        <p class="text-verde text-xs text-center mt-2">✅ Evidencia adjuntada — visible para el CRUE</p>
+      </div>
+
+      <button id="btnCancelar" class="hidden btn-outline-rojo mb-2">
+        Cancelar solicitud
+      </button>
+
+      <button id="btnNuevaEmergencia" class="hidden btn-primario-rojo">
+        ✅ Finalizar y volver al inicio
+      </button>
+    </section>
+
+    <!-- ===================== HISTORIAL ===================== -->
+    <section class="mt-10">
+      <h2 class="section-title">Historial de emergencias</h2>
+      <div id="historial" class="space-y-2">
+        <p class="text-desc-sm" id="historialVacio" style="text-align:left;">Aun no tienes emergencias registradas.</p>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer-text">
+    RESPIRA · Red Estrategica de Preactivacion, Inteligencia y Respuesta Agil
+  </footer>
+</div>
+
+<script>
+const API = "";
+let eventoActual = null;   // id del evento en curso
+let pollInterval = null;
+let timerInterval = null;
+let inicioTimestamp = null;
+let mapaSeguimiento = null;
+let markerCiudadano = null;
+let markerAmbulancia = null;
+let rutaLinea = null;
+let coordsCiudadano = null;
+let tileLayerSeguimiento = null;
+
+const $ = (id) => document.getElementById(id);
+
+// ---------------- Tema claro/oscuro ----------------
+function urlTilesParaTema(tema) {
+  return tema === "light"
+    ? "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+    : "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+}
+
+function aplicarTemaMapaSeguimiento(tema) {
+  if (!mapaSeguimiento) return;
+  if (tileLayerSeguimiento) mapaSeguimiento.removeLayer(tileLayerSeguimiento);
+  tileLayerSeguimiento = L.tileLayer(urlTilesParaTema(tema), { subdomains: "abcd" }).addTo(mapaSeguimiento);
+  tileLayerSeguimiento.bringToBack();
+}
+
+function aplicarTema(tema) {
+  document.documentElement.setAttribute("data-theme", tema);
+  localStorage.setItem("respira_tema", tema);
+  $("btnTema").textContent = tema === "dark" ? "☀️" : "🌙";
+  aplicarTemaMapaSeguimiento(tema);
+}
+
+$("btnTema").addEventListener("click", () => {
+  const actual = document.documentElement.getAttribute("data-theme") || "dark";
+  aplicarTema(actual === "dark" ? "light" : "dark");
+});
+
+$("btnTema").textContent =
+  (document.documentElement.getAttribute("data-theme") || "dark") === "dark" ? "☀️" : "🌙";
+
+function mostrarPantalla(id) {
+  ["pantalla-inicio", "pantalla-cargando", "pantalla-seguimiento"].forEach(s => {
+    $(s).classList.toggle("hidden", s !== id);
+  });
+}
+
+// ---------------- Flujo boton de panico ----------------
+$("btnPanico").addEventListener("click", () => {
+  mostrarPantalla("pantalla-cargando");
+  $("textoCarga").textContent = "🔍 Localizando tu posicion...";
+
+  if (!navigator.geolocation) {
+    alert("Tu navegador no soporta geolocalizacion. Usaremos una ubicacion de referencia en Bogota.");
+    enviarEmergencia(4.65, -74.08);
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => enviarEmergencia(pos.coords.latitude, pos.coords.longitude),
+    (err) => {
+      console.warn("Geolocalizacion fallo, usando ubicacion de referencia", err);
+      enviarEmergencia(4.65, -74.08);
+    },
+    { enableHighAccuracy: true, timeout: 8000 }
+  );
+});
+
+async function enviarEmergencia(lat, lng) {
+  coordsCiudadano = { lat, lng };
+  $("textoCarga").textContent = "📡 Enviando solicitud al CRUE...";
+
+  const res = await fetch(`${API}/api/emergencia`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ lat, lng, tipo: "no-SOAT" }),
+  });
+  const data = await res.json();
+  eventoActual = data.id_evento;
+
+  guardarEnHistorialLocal(eventoActual);
+  iniciarSeguimiento();
+}
+
+// ---------------- Pantalla de seguimiento ----------------
+function iniciarSeguimiento() {
+  mostrarPantalla("pantalla-seguimiento");
+  inicioTimestamp = Date.now();
+  $("btnCancelar").classList.add("hidden");
+  $("btnNuevaEmergencia").classList.add("hidden");
+  $("evidenciaPreview").classList.add("hidden");
+  $("evidenciaImg").classList.add("hidden");
+  $("evidenciaVideo").classList.add("hidden");
+  $("inputEvidencia").value = "";
+  $("btnEvidencia").textContent = "📎 Subir evidencia (foto / video)";
+  $("btnEvidencia").disabled = false;
+  actualizarStepper("pendiente");
+
+  markerAmbulancia = null;
+  rutaLinea = null;
+  tileLayerSeguimiento = null;
+
+  setTimeout(() => {
+    mapaSeguimiento = L.map("map-seguimiento", { zoomControl: false, attributionControl: false })
+      .setView([coordsCiudadano.lat, coordsCiudadano.lng], 14);
+    aplicarTemaMapaSeguimiento(document.documentElement.getAttribute("data-theme") || "dark");
+
+    markerCiudadano = L.circleMarker([coordsCiudadano.lat, coordsCiudadano.lng], {
+      radius: 9, color: "#ffffff", weight: 2, fillColor: "#22d3ee", fillOpacity: 0.95,
+    }).addTo(mapaSeguimiento).bindPopup("Tu ubicacion");
+  }, 50);
+
+  timerInterval = setInterval(actualizarTimer, 1000);
+  pollInterval = setInterval(consultarEstado, 3000);
+  consultarEstado();
+}
+
+function actualizarTimer() {
+  const segs = Math.floor((Date.now() - inicioTimestamp) / 1000);
+  const mm = String(Math.floor(segs / 60)).padStart(2, "0");
+  const ss = String(segs % 60).padStart(2, "0");
+  $("timer").textContent = `${mm}:${ss}`;
+
+  if (segs > 120) $("btnCancelar").classList.remove("hidden");
+}
+
+const ORDEN_ETAPAS = ["pendiente", "asignado", "en_camino", "completado"];
+
+function actualizarStepper(estadoActual) {
+  const idxActual = ORDEN_ETAPAS.indexOf(estadoActual);
+  ORDEN_ETAPAS.forEach((etapa, idx) => {
+    const circle = document.getElementById(`circle-${etapa}`);
+    const label = document.getElementById(`label-${etapa}`);
+    circle.classList.remove("done", "active");
+    label.classList.remove("done", "active");
+    if (idxActual < 0) return; // cancelado u otro estado no mapeado
+    if (idx < idxActual) {
+      circle.classList.add("done");
+      label.classList.add("done");
+    } else if (idx === idxActual) {
+      circle.classList.add(estadoActual === "completado" ? "done" : "active");
+      label.classList.add(estadoActual === "completado" ? "done" : "active");
+    }
+  });
+  for (let i = 1; i <= 3; i++) {
+    document.getElementById(`line-${i}`).classList.toggle("done", idxActual > i - 1 && idxActual >= 0);
+  }
+}
+
+async function consultarEstado() {
+  if (!eventoActual) return;
+  const res = await fetch(`${API}/api/eventos/${eventoActual}`);
+  if (!res.ok) return;
+  const evt = await res.json();
+
+  actualizarStepper(evt.estado);
+
+  if (evt.incentivo_ofrecido) {
+    $("incentivoTxt").textContent = `$${evt.incentivo_ofrecido.toLocaleString("es-CO")}`;
+  }
+
+  if (evt.estado === "pendiente") {
+    $("estadoSeguimiento").textContent = "🚑 Buscando ambulancia...";
+    $("detalleSeguimiento").textContent = "Estamos ubicando la unidad disponible mas cercana";
+  } else if (evt.estado === "asignado") {
+    $("estadoSeguimiento").textContent = `🚑 Asignada · ETA ${evt.eta_min ?? "-"} min`;
+    $("detalleSeguimiento").textContent = evt.ambulancia ? evt.ambulancia.nombre_prestador : "";
+    if (evt.ambulancia) actualizarMarkerAmbulancia(evt.ambulancia);
+  } else if (evt.estado === "en_camino") {
+    $("estadoSeguimiento").textContent = `🚑 En camino · Llegada en ${evt.eta_min ?? "-"} min`;
+    $("detalleSeguimiento").textContent = evt.ambulancia ? evt.ambulancia.nombre_prestador : "";
+    if (evt.ambulancia) actualizarMarkerAmbulancia(evt.ambulancia);
+  } else if (evt.estado === "completado") {
+    $("estadoSeguimiento").textContent = "✅ ¡La ambulancia ha llegado!";
+    $("detalleSeguimiento").textContent = `Tiempo de respuesta: ${evt.tiempo_respuesta_min} min`;
+    if (evt.ambulancia) actualizarMarkerAmbulancia(evt.ambulancia);
+    if (rutaLinea) { mapaSeguimiento.removeLayer(rutaLinea); rutaLinea = null; }
+    clearInterval(pollInterval);
+    clearInterval(timerInterval);
+    $("btnCancelar").classList.add("hidden");
+    $("btnNuevaEmergencia").classList.remove("hidden");
+    actualizarHistorialLocal(eventoActual, evt);
+  } else if (evt.estado === "cancelado") {
+    $("estadoSeguimiento").textContent = "❌ Solicitud cancelada";
+    clearInterval(pollInterval);
+    clearInterval(timerInterval);
+    $("btnNuevaEmergencia").classList.remove("hidden");
+    actualizarHistorialLocal(eventoActual, evt);
+  }
+}
+
+// Desliza el marcador de la ambulancia hasta su nueva posicion en vez de
+// "teletransportarlo" en cada poll (cada 3s), y va redibujando la linea de
+// ruta hacia el ciudadano mientras se mueve.
+function moverAmbulanciaSuave(destino, duracionMs = 2600) {
+  if (markerAmbulancia._animFrame) cancelAnimationFrame(markerAmbulancia._animFrame);
+  const origen = markerAmbulancia.getLatLng();
+  const inicio = performance.now();
+
+  function paso(ahora) {
+    const t = Math.min(1, (ahora - inicio) / duracionMs);
+    const lat = origen.lat + (destino.lat - origen.lat) * t;
+    const lng = origen.lng + (destino.lng - origen.lng) * t;
+    markerAmbulancia.setLatLng([lat, lng]);
+    if (rutaLinea) rutaLinea.setLatLngs([[coordsCiudadano.lat, coordsCiudadano.lng], [lat, lng]]);
+    if (t < 1) {
+      markerAmbulancia._animFrame = requestAnimationFrame(paso);
+    } else {
+      markerAmbulancia._animFrame = null;
+    }
+  }
+  markerAmbulancia._animFrame = requestAnimationFrame(paso);
+}
+
+function iconoAmbulancia() {
+  return L.divIcon({
+    className: "",
+    html: `<div style="font-size:22px; line-height:1; filter: drop-shadow(0 1px 3px rgba(0,0,0,.7));">🚑</div>`,
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
+  });
+}
+
+function actualizarMarkerAmbulancia(amb) {
+  if (!mapaSeguimiento) return;
+  const destino = { lat: amb.lat, lng: amb.lng };
+
+  if (markerAmbulancia) {
+    // La ambulancia ya existe en el mapa: solo se mueve, sin tocar el zoom/
+    // encuadre actual (para no pisar un zoom manual que haya hecho el usuario).
+    moverAmbulanciaSuave(destino);
+    markerAmbulancia.setPopupContent(amb.nombre_prestador);
+  } else {
+    // Primera vez que aparece la ambulancia: se crea el marcador, la ruta,
+    // y se encuadra el mapa una unica vez para mostrar ambos puntos.
+    markerAmbulancia = L.marker([amb.lat, amb.lng], { icon: iconoAmbulancia() })
+      .addTo(mapaSeguimiento)
+      .bindPopup(amb.nombre_prestador);
+    rutaLinea = L.polyline(
+      [[coordsCiudadano.lat, coordsCiudadano.lng], [amb.lat, amb.lng]],
+      { color: "#22d3ee", weight: 3, dashArray: "6 6", opacity: 0.85 }
+    ).addTo(mapaSeguimiento);
+
+    const bounds = L.latLngBounds([[coordsCiudadano.lat, coordsCiudadano.lng], [amb.lat, amb.lng]]);
+    mapaSeguimiento.fitBounds(bounds, { padding: [30, 30] });
+  }
+}
+
+// ---------------- Evidencia (foto/video real, subida al backend) ----------------
+$("btnEvidencia").addEventListener("click", () => $("inputEvidencia").click());
+$("inputEvidencia").addEventListener("change", async () => {
+  const archivo = $("inputEvidencia").files[0];
+  if (!archivo || !eventoActual) return;
+
+  const textoOriginal = $("btnEvidencia").textContent;
+  $("btnEvidencia").textContent = "⏳ Subiendo evidencia...";
+  $("btnEvidencia").disabled = true;
+
+  const formData = new FormData();
+  formData.append("archivo", archivo);
+
+  try {
+    const res = await fetch(`${API}/api/eventos/${eventoActual}/evidencia`, {
+      method: "POST",
+      body: formData,
+    });
+    if (!res.ok) throw new Error("upload fallido");
+    const data = await res.json();
+    mostrarPreviewEvidencia(data.url, archivo.type);
+    $("btnEvidencia").textContent = "📎 Cambiar evidencia";
+  } catch (e) {
+    alert("No se pudo subir la evidencia. Intenta de nuevo.");
+    $("btnEvidencia").textContent = textoOriginal;
+  } finally {
+    $("btnEvidencia").disabled = false;
+  }
+});
+
+function mostrarPreviewEvidencia(url, tipoMime) {
+  $("evidenciaPreview").classList.remove("hidden");
+  if ((tipoMime || "").startsWith("video/")) {
+    $("evidenciaVideo").src = url;
+    $("evidenciaVideo").classList.remove("hidden");
+    $("evidenciaImg").classList.add("hidden");
+  } else {
+    $("evidenciaImg").src = url;
+    $("evidenciaImg").classList.remove("hidden");
+    $("evidenciaVideo").classList.add("hidden");
+  }
+}
+
+// ---------------- Cancelar ----------------
+$("btnCancelar").addEventListener("click", () => {
+  clearInterval(pollInterval);
+  clearInterval(timerInterval);
+  mostrarPantalla("pantalla-inicio");
+  eventoActual = null;
+});
+
+// ---------------- Volver al inicio ----------------
+$("btnNuevaEmergencia").addEventListener("click", () => {
+  mostrarPantalla("pantalla-inicio");
+  eventoActual = null;
+  markerAmbulancia = null;
+  rutaLinea = null;
+  renderHistorial();
+});
+
+// ---------------- Historial local (por navegador, via localStorage) ----------------
+function guardarEnHistorialLocal(id) {
+  const historial = JSON.parse(localStorage.getItem("respira_historial") || "[]");
+  historial.unshift({ id, fecha: new Date().toISOString(), estado: "en curso", tiempo_respuesta_min: null });
+  localStorage.setItem("respira_historial", JSON.stringify(historial.slice(0, 20)));
+  renderHistorial();
+}
+
+function actualizarHistorialLocal(id, evt) {
+  const historial = JSON.parse(localStorage.getItem("respira_historial") || "[]");
+  const item = historial.find(h => h.id === id);
+  if (item) {
+    item.estado = evt.estado;
+    item.tiempo_respuesta_min = evt.tiempo_respuesta_min;
+  }
+  localStorage.setItem("respira_historial", JSON.stringify(historial));
+  renderHistorial();
+}
+
+function renderHistorial() {
+  const historial = JSON.parse(localStorage.getItem("respira_historial") || "[]");
+  const cont = $("historial");
+  if (historial.length === 0) {
+    cont.innerHTML = '<p class="text-desc-sm" style="text-align:left;">Aun no tienes emergencias registradas.</p>';
+    return;
+  }
+  cont.innerHTML = historial.map(h => {
+    const fecha = new Date(h.fecha).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" });
+    const badge = h.estado === "completado"
+      ? '<span class="text-verde">Completado</span>'
+      : h.estado === "cancelado"
+        ? '<span class="text-rojo">Cancelado</span>'
+        : '<span class="text-amarillo">En curso</span>';
+    const tiempo = h.tiempo_respuesta_min ? `${h.tiempo_respuesta_min} min` : "--";
+    return `
+      <div class="card-panel-sm flex justify-between items-center">
+        <div>
+          <p class="text-sm font-medium" style="color:var(--text)">${fecha}</p>
+          <p class="text-xs" style="color:var(--muted)">Tiempo de respuesta: ${tiempo}</p>
+        </div>
+        <div class="text-sm font-semibold">${badge}</div>
+      </div>
+    `;
+  }).join("");
+}
+
+renderHistorial();
+</script>
+</body>
+</html>

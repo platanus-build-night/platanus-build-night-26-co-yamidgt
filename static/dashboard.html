@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>RESPIRA · Panel CRUE</title>
+
+<script>
+  // Se aplica el tema ANTES de pintar la pagina para evitar el parpadeo
+  // (flash) de un tema incorrecto al cargar.
+  (function () {
+    var t = localStorage.getItem("respira_tema");
+    if (!t) t = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+<style>
+  :root[data-theme="dark"] {
+    --bg: #0a0e16;
+    --panel: #10141f;
+    --panel-2: #161b2a;
+    --well: #0a0f1c;
+    --border: #232a3d;
+    --divider: #1c2436;
+    --text: #e8ecf5;
+    --muted: #8993ab;
+    --verde: #10b981;
+    --amarillo: #f5a623;
+    --rojo: #ef4444;
+    --rojo-rgb: 239, 68, 68;
+    --acento: #22d3ee;
+    --verde-bg: rgba(16, 185, 129, .15);
+    --amarillo-bg: rgba(245, 166, 35, .15);
+    --rojo-bg: rgba(239, 68, 68, .15);
+    --acento-bg: rgba(34, 211, 238, .15);
+    --verde-text: #4ade80;
+    --amarillo-text: #ffd166;
+    --rojo-text: #ff8f83;
+    --on-accent: #04141a;
+    --header-grad-1: #0d1220;
+    --header-grad-2: #131a30;
+    --shadow: rgba(0, 0, 0, .45);
+  }
+  :root[data-theme="light"] {
+    --bg: #eef1f6;
+    --panel: #ffffff;
+    --panel-2: #f6f8fb;
+    --well: #e7ecf3;
+    --border: #d8dfe9;
+    --divider: #e4e9f0;
+    --text: #131826;
+    --muted: #5b6b82;
+    --verde: #059669;
+    --amarillo: #b45309;
+    --rojo: #dc2626;
+    --rojo-rgb: 220, 38, 38;
+    --acento: #0e7490;
+    --verde-bg: rgba(5, 150, 105, .10);
+    --amarillo-bg: rgba(180, 83, 9, .10);
+    --rojo-bg: rgba(220, 38, 38, .10);
+    --acento-bg: rgba(14, 116, 144, .10);
+    --verde-text: #059669;
+    --amarillo-text: #b45309;
+    --rojo-text: #dc2626;
+    --on-accent: #ffffff;
+    --header-grad-1: #ffffff;
+    --header-grad-2: #eaf6f8;
+    --shadow: rgba(20, 30, 50, .14);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: background-color .25s ease, color .25s ease;
+  }
+  .mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+
+  header {
+    flex: 0 0 auto;
+    height: 58px;
+    background:
+      repeating-linear-gradient(90deg, var(--divider) 0, var(--divider) 1px, transparent 1px, transparent 28px),
+      linear-gradient(90deg, var(--header-grad-1), var(--header-grad-2));
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 10px;
+    z-index: 20;
+    position: relative;
+  }
+  header .brand { display: flex; align-items: center; gap: 8px; }
+  header .live-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--rojo);
+    box-shadow: 0 0 0 0 rgba(var(--rojo-rgb), .6);
+    animation: live-pulse 2s infinite;
+  }
+  @keyframes live-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(var(--rojo-rgb), .55); }
+    70% { box-shadow: 0 0 0 7px rgba(var(--rojo-rgb), 0); }
+    100% { box-shadow: 0 0 0 0 rgba(var(--rojo-rgb), 0); }
+  }
+  header .logo {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 21px;
+    font-weight: 700;
+    letter-spacing: .5px;
+    color: var(--text);
+  }
+  header .sub {
+    color: var(--muted);
+    font-size: 12px;
+  }
+  header .right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .btn-tema {
+    width: 34px; height: 34px; border-radius: 8px;
+    background: var(--panel-2); border: 1px solid var(--border);
+    color: var(--text); font-size: 15px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color .2s, transform .15s;
+  }
+  .btn-tema:hover { border-color: var(--acento); }
+  .btn-tema:active { transform: scale(.92); }
+  header .status-dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--muted);
+  }
+  header .status-dot.on { background: var(--verde); box-shadow: 0 0 8px var(--verde); }
+
+  .metrics-bar {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  .metric-card {
+    flex: 1;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--acento-line, var(--acento));
+    border-radius: 8px;
+    padding: 10px 16px;
+  }
+  .metric-card.m-tiempo { --acento-line: var(--acento); }
+  .metric-card.m-porc { --acento-line: var(--verde); }
+  .metric-card.m-disp { --acento-line: var(--verde); }
+  .metric-card.m-eventos { --acento-line: var(--rojo); }
+  .metric-card .label { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; font-weight: 500; }
+  .metric-card .value { font-family: 'IBM Plex Mono', monospace; font-size: 24px; font-weight: 600; margin-top: 4px; }
+
+  .layout {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0; /* deja que sidebar-left/right y el mapa se ajusten y hagan scroll interno
+                      en vez de que .layout se estire mas alla del alto disponible */
+  }
+
+  #sidebar-left {
+    width: 260px;
+    min-width: 260px;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 12px;
+  }
+  #sidebar-right {
+    width: 310px;
+    min-width: 310px;
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 12px;
+  }
+  #map { flex: 1; background: var(--well); }
+
+  h3 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    color: var(--muted);
+    margin: 4px 0 10px;
+    font-weight: 600;
+  }
+
+  .evento-card {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--rojo);
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 10px;
+  }
+  .evento-card .tipo { font-weight: 600; font-size: 13px; }
+  .evento-card .espera { color: var(--muted); font-size: 11.5px; margin: 4px 0; }
+  .evento-card button {
+    width: 100%;
+    font-family: 'Space Grotesk', sans-serif;
+    background: var(--acento);
+    color: var(--on-accent);
+    border: none;
+    border-radius: 6px;
+    padding: 7px;
+    font-weight: 600;
+    letter-spacing: .3px;
+    cursor: pointer;
+    margin-top: 6px;
+  }
+  .evento-card button:hover { filter: brightness(1.1); }
+  .evento-card.en_camino { border-left-color: var(--amarillo); }
+
+  .evidencia-thumb {
+    margin-top: 8px; cursor: pointer;
+    border: 1px solid var(--border); border-radius: 6px; overflow: hidden;
+    height: 80px; background: var(--well);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 11px; gap: 4px;
+  }
+  .evidencia-thumb img, .evidencia-thumb video { width: 100%; height: 100%; object-fit: cover; }
+  .evidencia-thumb:hover { border-color: var(--acento); }
+
+  .urgencia-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10.5px; font-weight: 600;
+    padding: 3px 8px; border-radius: 5px;
+    margin-top: 6px; cursor: help;
+  }
+  .urgencia-badge.urgente { background: var(--rojo-bg); color: var(--rojo-text); border: 1px solid var(--rojo); }
+  .urgencia-badge.medio { background: var(--amarillo-bg); color: var(--amarillo-text); border: 1px solid var(--amarillo); }
+  .urgencia-badge.bajo { background: var(--verde-bg); color: var(--verde-text); border: 1px solid var(--verde); }
+  .urgencia-badge.analizando { background: var(--acento-bg); color: var(--acento); border: 1px solid var(--acento); }
+  .urgencia-badge.error { background: var(--panel); color: var(--muted); border: 1px solid var(--border); }
+
+  .btn-sim {
+    width: 100%;
+    font-family: 'Space Grotesk', sans-serif;
+    background: var(--rojo);
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    padding: 11px;
+    font-weight: 600;
+    letter-spacing: .3px;
+    cursor: pointer;
+    margin-bottom: 14px;
+  }
+  .btn-sim:hover { filter: brightness(1.1); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12px; font-family: 'IBM Plex Mono', monospace; }
+  th {
+    text-align: left; color: var(--muted); font-weight: 500;
+    font-family: 'IBM Plex Sans', sans-serif;
+    padding: 6px 4px; border-bottom: 1px solid var(--border);
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px;
+  }
+  td { padding: 7px 4px; border-bottom: 1px solid var(--divider); }
+  .pill { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+  .pill.verde { background: var(--verde); }
+  .pill.amarillo { background: var(--amarillo); }
+  .pill.rojo { background: var(--rojo); }
+  tr.rojo td { color: var(--rojo-text); }
+  tr.amarillo td { color: var(--amarillo-text); }
+
+  /* Modal de asignacion. z-index alto porque los controles internos de Leaflet
+     (zoom, atribucion) usan hasta z-index:1000 y quedarian por encima si no. */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(6, 9, 16, .68);
+    display: none; align-items: center; justify-content: center; z-index: 2000;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    width: 420px; max-height: 80vh; overflow-y: auto;
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px;
+    box-shadow: 0 20px 60px var(--shadow);
+  }
+  .modal h2 { margin-top: 0; font-size: 15px; font-family: 'Space Grotesk', sans-serif; }
+  .amb-row {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--well); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px; margin-bottom: 8px;
+  }
+  .amb-row .info { font-size: 13px; }
+  .amb-row .info .nombre { font-weight: 600; }
+  .amb-row .info .detalle { color: var(--muted); font-size: 11px; font-family: 'IBM Plex Mono', monospace; }
+  .amb-row .incentivo { color: var(--verde-text); font-weight: 600; font-size: 13px; font-family: 'IBM Plex Mono', monospace; }
+  .amb-row button {
+    font-family: 'Space Grotesk', sans-serif;
+    background: var(--acento); border: none; border-radius: 6px;
+    padding: 6px 10px; font-weight: 600; cursor: pointer; color: var(--on-accent);
+  }
+  .modal .cerrar {
+    display: block; margin: 10px auto 0; background: transparent;
+    border: 1px solid var(--border); color: var(--muted); padding: 6px 14px;
+    border-radius: 6px; cursor: pointer;
+  }
+
+  .leaflet-popup-content-wrapper { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; font-family: 'IBM Plex Sans', sans-serif; }
+  .leaflet-popup-tip { background: var(--panel-2); }
+
+  /* Toast de nueva emergencia (por encima de Leaflet y del modal) */
+  #toast {
+    position: fixed; top: 74px; right: 20px; z-index: 2100;
+    background: linear-gradient(90deg, #7a1414, #b91c1c);
+    border: 1px solid #f87171; color: white;
+    padding: 12px 18px; border-radius: 8px;
+    font-weight: 600; font-size: 13px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, .4);
+    transform: translateX(140%); transition: transform .35s ease;
+    display: flex; align-items: center; gap: 8px;
+    pointer-events: none;
+  }
+  #toast.show { transform: translateX(0); }
+
+  /* Marcador de evento sin asignar: pulso rojo para llamar la atencion */
+  @keyframes marker-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(var(--rojo-rgb), .7); }
+    70% { box-shadow: 0 0 0 14px rgba(var(--rojo-rgb), 0); }
+    100% { box-shadow: 0 0 0 0 rgba(var(--rojo-rgb), 0); }
+  }
+  .evento-pin.pendiente { animation: marker-pulse 1.6s infinite; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="live-dot"></span>
+    <span class="logo">RESPIRA</span>
+  </div>
+  <div class="sub">Panel CRUE · Red Estrategica de Preactivacion, Inteligencia y Respuesta Agil</div>
+  <div class="right">
+    <button class="btn-tema" id="btnTema" title="Cambiar tema" aria-label="Cambiar tema claro/oscuro">🌙</button>
+    <div class="status-dot" id="statusDot"></div>
+  </div>
+</header>
+
+<div class="metrics-bar">
+  <div class="metric-card m-tiempo">
+    <div class="label">Tiempo prom. de respuesta hoy</div>
+    <div class="value" id="mTiempo">-- min</div>
+  </div>
+  <div class="metric-card m-porc">
+    <div class="label">% asignacion exitosa</div>
+    <div class="value" id="mPorc">--%</div>
+  </div>
+  <div class="metric-card m-disp">
+    <div class="label">Ambulancias disponibles</div>
+    <div class="value" id="mDisp">--</div>
+  </div>
+  <div class="metric-card m-eventos">
+    <div class="label">Eventos activos</div>
+    <div class="value" id="mEventos">--</div>
+  </div>
+</div>
+
+<div class="layout">
+  <div id="sidebar-left">
+    <button class="btn-sim" id="btnSimular">🚨 Simular Emergencia No-SOAT</button>
+    <h3>Eventos activos</h3>
+    <div id="listaEventos"></div>
+  </div>
+
+  <div id="map"></div>
+
+  <div id="sidebar-right">
+    <h3>Ranking de prestadores</h3>
+    <table>
+      <thead>
+        <tr><th>#</th><th>Prestador</th><th>Pts</th><th>Aten.</th><th>Rech.</th></tr>
+      </thead>
+      <tbody id="tablaRanking"></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h2 id="modalTitulo">Asignar ambulancia</h2>
+    <div id="modalLista"></div>
+    <button class="cerrar" onclick="cerrarModal()">Cerrar</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="evidenciaOverlay">
+  <div class="modal" style="width:auto; max-width:90vw;">
+    <h2>Evidencia adjunta</h2>
+    <div id="evidenciaContenido"></div>
+    <button class="cerrar" onclick="cerrarEvidencia()">Cerrar</button>
+  </div>
+</div>
+
+<script>
+const API = "";
+const socket = io();
+
+socket.on("connect", () => document.getElementById("statusDot").classList.add("on"));
+socket.on("disconnect", () => document.getElementById("statusDot").classList.remove("on"));
+
+// ---------------- Tema claro/oscuro ----------------
+function urlTilesParaTema(tema) {
+  return tema === "light"
+    ? "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+    : "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+}
+
+let tileLayerActual = null;
+function aplicarTemaMapa(tema) {
+  if (tileLayerActual) map.removeLayer(tileLayerActual);
+  tileLayerActual = L.tileLayer(urlTilesParaTema(tema), {
+    attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+    subdomains: "abcd",
+    maxZoom: 19,
+  }).addTo(map);
+  tileLayerActual.bringToBack();
+}
+
+function aplicarTema(tema) {
+  document.documentElement.setAttribute("data-theme", tema);
+  localStorage.setItem("respira_tema", tema);
+  document.getElementById("btnTema").textContent = tema === "dark" ? "☀️" : "🌙";
+  aplicarTemaMapa(tema);
+}
+
+document.getElementById("btnTema").addEventListener("click", () => {
+  const actual = document.documentElement.getAttribute("data-theme") || "dark";
+  aplicarTema(actual === "dark" ? "light" : "dark");
+});
+
+// ---------------- Mapa ----------------
+const map = L.map("map").setView([4.65, -74.08], 12);
+aplicarTemaMapa(document.documentElement.getAttribute("data-theme") || "dark");
+document.getElementById("btnTema").textContent =
+  (document.documentElement.getAttribute("data-theme") || "dark") === "dark" ? "☀️" : "🌙";
+
+const ambMarkers = {};   // id -> circleMarker
+const evtMarkers = {};   // id -> marker
+let heatLayer = null;
+
+function colorEstado(estado) {
+  if (estado === "disponible") return "#10b981";
+  if (estado === "ocupada") return "#f5a623";
+  return "#ef4444"; // rechazo
+}
+
+// Interpola suavemente un circleMarker de su posicion actual a una nueva,
+// en vez de "teletransportarlo" en cada tick de la simulacion (cada 5s).
+function moverMarcadorSuave(marker, destino, duracionMs = 4500) {
+  if (marker._animFrame) cancelAnimationFrame(marker._animFrame);
+  const origen = marker.getLatLng();
+  const inicio = performance.now();
+
+  function paso(ahora) {
+    const t = Math.min(1, (ahora - inicio) / duracionMs);
+    const lat = origen.lat + (destino.lat - origen.lat) * t;
+    const lng = origen.lng + (destino.lng - origen.lng) * t;
+    marker.setLatLng([lat, lng]);
+    if (t < 1) {
+      marker._animFrame = requestAnimationFrame(paso);
+    } else {
+      marker._animFrame = null;
+    }
+  }
+  marker._animFrame = requestAnimationFrame(paso);
+}
+
+function upsertAmbulancia(amb) {
+  const color = colorEstado(amb.estado);
+  if (ambMarkers[amb.id]) {
+    moverMarcadorSuave(ambMarkers[amb.id], { lat: amb.lat, lng: amb.lng });
+    ambMarkers[amb.id].setStyle({ fillColor: color });
+    ambMarkers[amb.id].setPopupContent(popupAmbulancia(amb));
+  } else {
+    const m = L.circleMarker([amb.lat, amb.lng], {
+      radius: 8, color: "#ffffff", weight: 2, fillColor: color, fillOpacity: 0.95,
+    }).addTo(map);
+    m.bindPopup(popupAmbulancia(amb));
+    ambMarkers[amb.id] = m;
+  }
+}
+
+function popupAmbulancia(amb) {
+  return `<b>🚑 ${amb.nombre_prestador}</b><br/>
+    Estado: ${amb.estado}<br/>
+    Puntaje: ${amb.puntaje}<br/>
+    Atendidos hoy: ${amb.eventos_atendidos_hoy}`;
+}
+
+function minutosDesde(timestamp) {
+  return Math.max(0, Math.round((Date.now() - new Date(timestamp).getTime()) / 60000));
+}
+
+// ---------------- Evidencia (foto/video subido por el ciudadano) ----------------
+function esVideo(url) {
+  return /\.(mp4|mov|webm)$/i.test(url);
+}
+
+function renderEvidenciaThumb(evt) {
+  if (!evt.video_url) return "";
+  const contenido = esVideo(evt.video_url)
+    ? `🎥 Ver video evidencia`
+    : `<img src="${evt.video_url}" alt="evidencia" />`;
+  return `<div class="evidencia-thumb" onclick="abrirEvidencia('${evt.video_url}')">${contenido}</div>`;
+}
+
+// ---------------- Urgencia estimada por IA (sugerencia, no diagnostico) ----------------
+function renderUrgenciaBadge(evt) {
+  const u = evt.urgencia_ia;
+  if (!u) return "";
+  if (u.estado === "analizando") {
+    return `<div class="urgencia-badge analizando">🔍 IA analizando evidencia...</div>`;
+  }
+  if (u.estado === "error") {
+    return `<div class="urgencia-badge error">⚠️ ${u.detalle || "No se pudo evaluar"}</div>`;
+  }
+  const emoji = { urgente: "🔴", medio: "🟡", bajo: "🟢" }[u.categoria] || "";
+  const tooltip = `Sugerencia de IA (no es diagnostico medico): ${u.razon}`;
+  return `<div class="urgencia-badge ${u.categoria}" title="${tooltip}">${emoji} ${u.categoria.toUpperCase()} · ${u.puntaje_urgencia}/100 (sugerencia IA)</div>`;
+}
+
+function abrirEvidencia(url) {
+  const cont = document.getElementById("evidenciaContenido");
+  cont.innerHTML = esVideo(url)
+    ? `<video src="${url}" controls autoplay style="max-width:80vw; max-height:70vh; border-radius:8px; display:block;"></video>`
+    : `<img src="${url}" style="max-width:80vw; max-height:70vh; border-radius:8px; display:block;" />`;
+  document.getElementById("evidenciaOverlay").classList.add("open");
+}
+
+function cerrarEvidencia() {
+  document.getElementById("evidenciaOverlay").classList.remove("open");
+  document.getElementById("evidenciaContenido").innerHTML = "";
+}
+
+function upsertEvento(evt) {
+  if (evt.estado === "completado" || evt.estado === "cancelado") {
+    if (evtMarkers[evt.id]) { map.removeLayer(evtMarkers[evt.id]); delete evtMarkers[evt.id]; }
+    return;
+  }
+  const mins = minutosDesde(evt.timestamp);
+  const icon = L.divIcon({
+    className: `evento-pin${evt.estado === "pendiente" ? " pendiente" : ""}`,
+    html: `<div style="background:var(--rojo);color:white;border-radius:50%;width:30px;height:30px;
+           display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;
+           border:2px solid white;box-shadow:0 0 6px rgba(0,0,0,.5)">${mins}m</div>`,
+    iconSize: [30, 30],
+  });
+  if (evtMarkers[evt.id]) {
+    evtMarkers[evt.id].setLatLng([evt.lat, evt.lng]);
+    evtMarkers[evt.id].setIcon(icon);
+  } else {
+    const m = L.marker([evt.lat, evt.lng], { icon }).addTo(map);
+    m.bindPopup(`Evento ${evt.tipo}<br/>Estado: ${evt.estado}`);
+    evtMarkers[evt.id] = m;
+  }
+}
+
+async function cargarHeatmap() {
+  const res = await fetch(`${API}/api/predict`);
+  const zonas = await res.json();
+  const puntos = zonas.map(z => [z.lat, z.lng, z.intensidad]);
+  if (heatLayer) map.removeLayer(heatLayer);
+  heatLayer = L.heatLayer(puntos, { radius: 45, blur: 35, maxZoom: 14 }).addTo(map);
+}
+
+// ---------------- Sidebar izquierdo: eventos ----------------
+let eventosCache = [];
+
+async function cargarEventos() {
+  const res = await fetch(`${API}/api/eventos`);
+  eventosCache = await res.json();
+  renderEventos();
+  eventosCache.forEach(upsertEvento);
+  document.getElementById("mEventos").textContent = eventosCache.length;
+}
+
+function renderEventos() {
+  const cont = document.getElementById("listaEventos");
+  cont.innerHTML = "";
+  eventosCache
+    .slice()
+    .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+    .forEach(evt => {
+      const div = document.createElement("div");
+      div.className = "evento-card" + (evt.estado === "en_camino" ? " en_camino" : "");
+      div.innerHTML = `
+        <div class="tipo">🚨 ${evt.tipo}</div>
+        <div class="espera">Esperando: ${minutosDesde(evt.timestamp)} min · Estado: ${evt.estado}</div>
+        ${renderEvidenciaThumb(evt)}
+        ${renderUrgenciaBadge(evt)}
+        ${evt.estado === "pendiente" ? `<button onclick="abrirModal('${evt.id}')">Asignar</button>` : `<div class="espera">Ambulancia asignada · ETA ${evt.eta_min ?? "-"} min</div>`}
+      `;
+      cont.appendChild(div);
+    });
+}
+
+// ---------------- Modal de asignacion ----------------
+async function abrirModal(eventoId) {
+  const res = await fetch(`${API}/api/ambulancias_cercanas/${eventoId}`);
+  const candidatas = await res.json();
+  document.getElementById("modalTitulo").textContent = "Asignar ambulancia";
+  const cont = document.getElementById("modalLista");
+  const evt = eventosCache.find(e => e.id === eventoId);
+  cont.innerHTML = evt ? renderEvidenciaThumb(evt) + renderUrgenciaBadge(evt) : "";
+  cont.innerHTML += candidatas.length
+    ? ""
+    : `<p style="color:var(--muted)">No hay ambulancias disponibles cerca.</p>`;
+
+  candidatas.forEach(amb => {
+    const row = document.createElement("div");
+    row.className = "amb-row";
+    row.innerHTML = `
+      <div class="info">
+        <div class="nombre">${amb.nombre_prestador}</div>
+        <div class="detalle">${amb.distancia_km} km · puntaje ${amb.puntaje} · ETA ${amb.incentivo_sugerido.eta_min} min</div>
+      </div>
+      <div>
+        <div class="incentivo">$${amb.incentivo_sugerido.total.toLocaleString("es-CO")}</div>
+        <button onclick="asignar('${eventoId}', '${amb.id}', ${amb.incentivo_sugerido.total})">Asignar</button>
+      </div>
+    `;
+    cont.appendChild(row);
+  });
+
+  document.getElementById("modalOverlay").classList.add("open");
+}
+
+function cerrarModal() {
+  document.getElementById("modalOverlay").classList.remove("open");
+}
+
+async function asignar(eventoId, ambulanciaId, incentivo) {
+  await fetch(`${API}/api/asignar`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ evento_id: eventoId, ambulancia_id: ambulanciaId, incentivo_ofrecido: incentivo }),
+  });
+  cerrarModal();
+  cargarEventos();
+}
+
+// ---------------- Ranking ----------------
+async function cargarRanking() {
+  const res = await fetch(`${API}/api/ranking`);
+  const ranking = await res.json();
+  const tbody = document.getElementById("tablaRanking");
+  tbody.innerHTML = "";
+  ranking.forEach(r => {
+    const tr = document.createElement("tr");
+    tr.className = r.color;
+    tr.innerHTML = `
+      <td>${r.posicion}</td>
+      <td><span class="pill ${r.color}"></span>${r.nombre_prestador}</td>
+      <td>${r.puntaje}</td>
+      <td>${r.eventos_atendidos_hoy}</td>
+      <td>${r.rechazos_consecutivos}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// ---------------- Metricas ----------------
+async function cargarMetricas() {
+  const res = await fetch(`${API}/api/metricas`);
+  const m = await res.json();
+  document.getElementById("mTiempo").textContent = `${m.tiempo_promedio_respuesta_hoy} min`;
+  document.getElementById("mPorc").textContent = `${m.porcentaje_asignacion_exitosa}%`;
+  document.getElementById("mDisp").textContent = m.ambulancias_disponibles_ahora;
+}
+
+// ---------------- Boton simular emergencia ----------------
+document.getElementById("btnSimular").addEventListener("click", async () => {
+  const center = map.getCenter();
+  await fetch(`${API}/api/emergencia`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ lat: center.lat, lng: center.lng, tipo: "no-SOAT" }),
+  });
+});
+
+// ---------------- Alerta sonora y visual para eventos nuevos ----------------
+function reproducirAlerta() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [880, 660].forEach((freq, i) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.value = freq;
+      const t0 = ctx.currentTime + i * 0.16;
+      g.gain.setValueAtTime(0.001, t0);
+      g.gain.exponentialRampToValueAtTime(0.18, t0 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.18);
+      o.connect(g).connect(ctx.destination);
+      o.start(t0);
+      o.stop(t0 + 0.2);
+    });
+  } catch (e) { /* audio no disponible (autoplay bloqueado, etc.) */ }
+}
+
+let toastTimeout = null;
+function mostrarToast(mensaje) {
+  const toast = document.getElementById("toast");
+  toast.textContent = mensaje;
+  toast.classList.add("show");
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => toast.classList.remove("show"), 3200);
+}
+
+// ---------------- Sockets en tiempo real ----------------
+socket.on("nuevo_evento", (evt) => {
+  eventosCache.push(evt);
+  renderEventos();
+  upsertEvento(evt);
+  cargarMetricas();
+  reproducirAlerta();
+  mostrarToast(`🚨 Nueva emergencia no-SOAT reportada`);
+});
+
+socket.on("evento_actualizado", (evt) => {
+  const idx = eventosCache.findIndex(e => e.id === evt.id);
+  if (idx >= 0) eventosCache[idx] = evt; else eventosCache.push(evt);
+  renderEventos();
+  upsertEvento(evt);
+  cargarMetricas();
+});
+
+socket.on("ambulancia_actualizada", (amb) => {
+  upsertAmbulancia(amb);
+  cargarMetricas();
+});
+
+socket.on("ranking_actualizado", (ranking) => {
+  const tbody = document.getElementById("tablaRanking");
+  tbody.innerHTML = "";
+  ranking.forEach(r => {
+    const tr = document.createElement("tr");
+    tr.className = r.color;
+    tr.innerHTML = `
+      <td>${r.posicion}</td>
+      <td><span class="pill ${r.color}"></span>${r.nombre_prestador}</td>
+      <td>${r.puntaje}</td>
+      <td>${r.eventos_atendidos_hoy}</td>
+      <td>${r.rechazos_consecutivos}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+});
+
+// ---------------- Carga inicial ----------------
+async function init() {
+  const res = await fetch(`${API}/api/ambulancias`);
+  const ambs = await res.json();
+  ambs.forEach(upsertAmbulancia);
+
+  await cargarEventos();
+  await cargarRanking();
+  await cargarMetricas();
+  await cargarHeatmap();
+}
+init();
+
+// Refrescos periodicos livianos (por si se pierde algun evento de socket)
+setInterval(cargarEventos, 8000);
+setInterval(cargarMetricas, 8000);
+setInterval(cargarHeatmap, 60000);
+</script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+uvicorn.log
+static/evidencias/*
+!static/evidencias/.gitkeep
+.env
