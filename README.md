@@ -11,6 +11,14 @@ Conecta a ciudadanos que reportan emergencias con prestadores privados de transp
 - Ciudadano: https://respira-kxro.onrender.com/static/ciudadano.html
 - Dashboard CRUE: https://respira-kxro.onrender.com/static/dashboard.html
 
+## QR Codes de Despliegue
+
+### Ciudadano (Generico para cualquier persona)
+![QR Ciudadano](https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://respira-kxro.onrender.com/static/ciudadano.html)
+
+### Dashboard CRUE
+![QR Dashboard](https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://respira-kxro.onrender.com/static/dashboard.html)
+
 ## Caracteristicas
 
 - **Panel CRUE en tiempo real** — mapa con eventos activos, mapa de calor de zonas criticas y seguimiento de ambulancias
