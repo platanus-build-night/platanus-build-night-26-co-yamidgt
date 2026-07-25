@@ -208,7 +208,7 @@ def nuevo_evento(lat: float, lng: float, tipo: str = "emergencia", video_url: Op
         "lng": lng,
         "tipo": tipo,
         "video_url": video_url,
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.now().isoformat(timespec="milliseconds"),
         "estado": "pendiente",  # pendiente | asignado | en_camino | completado | cancelado
         "ambulancia_id": None,
         "incentivo_ofrecido": None,
