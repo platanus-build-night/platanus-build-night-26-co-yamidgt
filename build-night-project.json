@@ -1,0 +1,5 @@
+{
+  "project-name": "RESPIRA",
+  "project-oneliner": "Sistema de despacho de ambulancias para emergencias médicas con incentivos en tiempo real",
+  "project-description": "RESPIRA es un sistema desarrollado para el hackathon de Build Night que permite el despacho inteligente de ambulancias ante emergencias médicas. La plataforma conecta a ciudadanos que reportan emergencias con prestadores privados de transporte médico, asignando unidades disponibles según cercanía y puntaje de confiabilidad, y aplicando incentivos monetarios por despacho y rapidez. Incluye panel CRUE en tiempo real con mapa de calor de zonas críticas, seguimiento de pacientes, evidencia multimedia, triage asistido por IA y sistema de ranking/puntaje para prestadores."
+}
